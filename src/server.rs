@@ -28,6 +28,10 @@ pub(crate) struct AuditServer {
 pub(crate) struct RunAuditParams {
     #[schemars(description = "Alias of a target defined in the operator config")]
     target: String,
+    #[serde(default)]
+    #[schemars(description = "Audit profile: \"home\" (default) or \"corporate\"; \
+                              overrides the target's configured profile")]
+    profile: Option<String>,
 }
 
 #[tool_router]
@@ -55,11 +59,19 @@ impl AuditServer {
             .target(&params.target)
             .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
 
+        // Profile precedence: tool argument → target config → Home.
+        let profile = match params.profile.as_deref() {
+            Some(name) => scoring::Profile::parse(name).ok_or_else(|| {
+                McpError::invalid_params(format!("unknown profile {name:?}"), None)
+            })?,
+            None => target.profile.unwrap_or_default(),
+        };
+
         let findings = audit::run_audit(&target.to_ssh_config())
             .await
             .map_err(|e| McpError::internal_error(format!("audit failed: {e}"), None))?;
 
-        let score = scoring::score(&findings, scoring::DEFAULT_WEIGHTS);
+        let score = scoring::score(&findings, profile);
 
         let summary = summarize(&params.target, &score, &findings);
         let findings_json = serde_json::to_string_pretty(&findings)
@@ -78,8 +90,9 @@ impl AuditServer {
 fn summarize(target: &str, score: &Score, findings: &[Finding]) -> String {
     let count = |s: Status| findings.iter().filter(|f| f.status == s).count();
     let mut out = format!(
-        "Audit of {:?}: score {}/100 — {} passed, {} failed, {} errored (of {} checks).\n",
+        "Audit of {:?} [{:?} profile]: score {}/100 — {} passed, {} failed, {} errored (of {} checks).\n",
         target,
+        score.profile,
         score.total,
         count(Status::Pass),
         count(Status::Fail),

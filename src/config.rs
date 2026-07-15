@@ -15,6 +15,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
+use crate::scoring::Profile;
 use crate::ssh::{SshConfig, StrictHostKey};
 
 #[derive(Debug, Deserialize)]
@@ -38,6 +39,9 @@ pub struct Target {
     pub connect_timeout_secs: u64,
     #[serde(default = "default_command_secs")]
     pub command_timeout_secs: u64,
+    /// Default audit profile for this target; overridable per `run_audit` call.
+    #[serde(default)]
+    pub profile: Option<Profile>,
 }
 
 fn default_port() -> u16 {
@@ -169,6 +173,7 @@ mod tests {
             port = 2222
             user = "auditor"
             strict_host_key = "yes"
+            profile = "corporate"
             "#,
         )
         .unwrap();
@@ -176,9 +181,11 @@ mod tests {
         let home = cfg.target("home").unwrap();
         assert_eq!(home.port, 22);
         assert_eq!(home.user, "admin");
+        assert_eq!(home.profile, None);
 
         let corp = cfg.target("corp").unwrap();
         assert_eq!(corp.port, 2222);
+        assert_eq!(corp.profile, Some(Profile::Corporate));
         let ssh = corp.to_ssh_config();
         assert_eq!(ssh.host, "10.0.0.1");
         assert_eq!(ssh.strict_host_key, StrictHostKey::Yes);

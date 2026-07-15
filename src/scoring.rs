@@ -1,5 +1,5 @@
 //! Security scoring: turn findings into a 0–100 score with a per-domain
-//! breakdown.
+//! breakdown, under a chosen audit [`Profile`].
 //!
 //! `S = clamp( Σ(weight_i × domain_score_i) − penalties, 0, 100 )`
 //!
@@ -8,14 +8,15 @@
 //! total even when its domain is lightly weighted (otherwise averaging would
 //! dilute it). Checks that errored (command didn't run) are excluded.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::checks::{Domain, Finding, Severity, Status};
 
-/// Domain weights for the score. Sum to 1.0. Made profile-dependent in Stage 6.
+/// Domain weights for a profile. Each set sums to 1.0.
 pub type Weights = &'static [(Domain, f64)];
 
-pub const DEFAULT_WEIGHTS: Weights = &[
+/// Balanced defaults for a home router.
+const HOME_WEIGHTS: Weights = &[
     (Domain::Firewall, 0.25),
     (Domain::Auth, 0.20),
     (Domain::Services, 0.20),
@@ -23,6 +24,43 @@ pub const DEFAULT_WEIGHTS: Weights = &[
     (Domain::Updates, 0.10),
     (Domain::Logging, 0.10),
 ];
+
+/// Stricter on accounts and audit-trail (auth, logging).
+const CORPORATE_WEIGHTS: Weights = &[
+    (Domain::Firewall, 0.25),
+    (Domain::Auth, 0.25),
+    (Domain::Services, 0.15),
+    (Domain::NetworkHygiene, 0.10),
+    (Domain::Updates, 0.10),
+    (Domain::Logging, 0.15),
+];
+
+/// Audit profile: selects the domain weighting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Profile {
+    #[default]
+    Home,
+    Corporate,
+}
+
+impl Profile {
+    pub fn weights(self) -> Weights {
+        match self {
+            Self::Home => HOME_WEIGHTS,
+            Self::Corporate => CORPORATE_WEIGHTS,
+        }
+    }
+
+    /// Parse a profile name (case-insensitive); `None` if unknown.
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "home" => Some(Self::Home),
+            "corporate" => Some(Self::Corporate),
+            _ => None,
+        }
+    }
+}
 
 /// Points a failed check subtracts from its domain's score.
 fn deduction(severity: Severity) -> f64 {
@@ -58,14 +96,16 @@ pub struct DomainScore {
 #[derive(Debug, Clone, Serialize)]
 pub struct Score {
     pub total: u8,
+    pub profile: Profile,
     /// Weighted sum of domain scores, before penalties.
     pub base: f64,
     pub penalties: u32,
     pub domains: Vec<DomainScore>,
 }
 
-/// Compute the score for `findings` under `weights`.
-pub fn score(findings: &[Finding], weights: Weights) -> Score {
+/// Compute the score for `findings` under `profile`.
+pub fn score(findings: &[Finding], profile: Profile) -> Score {
+    let weights = profile.weights();
     let mut domains = Vec::with_capacity(weights.len());
     let mut base = 0.0;
     let mut penalties = 0u32;
@@ -108,6 +148,7 @@ pub fn score(findings: &[Finding], weights: Weights) -> Score {
 
     Score {
         total,
+        profile,
         base,
         penalties,
         domains,
@@ -131,17 +172,33 @@ mod tests {
     }
 
     #[test]
+    fn profile_weights_sum_to_one() {
+        for profile in [Profile::Home, Profile::Corporate] {
+            let sum: f64 = profile.weights().iter().map(|&(_, w)| w).sum();
+            assert!((sum - 1.0).abs() < 1e-9, "{profile:?} weights sum to {sum}");
+        }
+    }
+
+    #[test]
+    fn parse_profile() {
+        assert_eq!(Profile::parse("home"), Some(Profile::Home));
+        assert_eq!(Profile::parse("CORPORATE"), Some(Profile::Corporate));
+        assert_eq!(Profile::parse("nope"), None);
+        assert_eq!(Profile::default(), Profile::Home);
+    }
+
+    #[test]
     fn all_pass_is_100() {
         let findings = vec![
             finding(Domain::Firewall, Severity::High, Status::Pass),
             finding(Domain::Auth, Severity::Medium, Status::Pass),
         ];
-        assert_eq!(score(&findings, DEFAULT_WEIGHTS).total, 100);
+        assert_eq!(score(&findings, Profile::Home).total, 100);
     }
 
     #[test]
     fn empty_is_100() {
-        assert_eq!(score(&[], DEFAULT_WEIGHTS).total, 100);
+        assert_eq!(score(&[], Profile::Home).total, 100);
     }
 
     #[test]
@@ -149,7 +206,7 @@ mod tests {
         // Firewall (weight 0.25) with one High fail: domain 70, base = 100 - 0.25*30 = 92.5,
         // minus penalty 8 → 84.5 → 85 (other domains have no findings → score 100).
         let findings = vec![finding(Domain::Firewall, Severity::High, Status::Fail)];
-        let s = score(&findings, DEFAULT_WEIGHTS);
+        let s = score(&findings, Profile::Home);
         assert_eq!(s.penalties, 8);
         assert_eq!(s.total, 85);
         let fw = s
@@ -162,15 +219,25 @@ mod tests {
     }
 
     #[test]
+    fn corporate_weights_auth_more_than_home() {
+        // A single Medium auth failure costs more under corporate (auth 0.25 vs 0.20).
+        let findings = vec![finding(Domain::Auth, Severity::Medium, Status::Fail)];
+        let home = score(&findings, Profile::Home).total;
+        let corp = score(&findings, Profile::Corporate).total;
+        assert_eq!(home, 97);
+        assert_eq!(corp, 96);
+        assert!(corp < home);
+    }
+
+    #[test]
     fn domain_score_clamps_at_zero() {
-        // Three High fails in one domain: 90 deduction, then a Critical → clamps at 0.
         let findings = vec![
             finding(Domain::NetworkHygiene, Severity::High, Status::Fail),
             finding(Domain::NetworkHygiene, Severity::High, Status::Fail),
             finding(Domain::NetworkHygiene, Severity::High, Status::Fail),
             finding(Domain::NetworkHygiene, Severity::Critical, Status::Fail),
         ];
-        let s = score(&findings, DEFAULT_WEIGHTS);
+        let s = score(&findings, Profile::Home);
         let h = s
             .domains
             .iter()
@@ -182,7 +249,7 @@ mod tests {
     #[test]
     fn errored_checks_do_not_deduct() {
         let findings = vec![finding(Domain::Auth, Severity::Critical, Status::Error)];
-        let s = score(&findings, DEFAULT_WEIGHTS);
+        let s = score(&findings, Profile::Home);
         assert_eq!(s.total, 100);
         assert_eq!(s.penalties, 0);
         let a = s.domains.iter().find(|d| d.domain == Domain::Auth).unwrap();
@@ -192,13 +259,19 @@ mod tests {
 
     #[test]
     fn total_never_below_zero() {
-        // Pile on failures across domains; total must clamp to 0, not go negative.
-        let findings: Vec<Finding> = DEFAULT_WEIGHTS
-            .iter()
-            .flat_map(|&(d, _)| {
-                std::iter::repeat_with(move || finding(d, Severity::Critical, Status::Fail)).take(5)
-            })
-            .collect();
-        assert_eq!(score(&findings, DEFAULT_WEIGHTS).total, 0);
+        let findings: Vec<Finding> = [
+            Domain::Firewall,
+            Domain::Auth,
+            Domain::Services,
+            Domain::NetworkHygiene,
+            Domain::Updates,
+            Domain::Logging,
+        ]
+        .into_iter()
+        .flat_map(|d| {
+            std::iter::repeat_with(move || finding(d, Severity::Critical, Status::Fail)).take(5)
+        })
+        .collect();
+        assert_eq!(score(&findings, Profile::Home).total, 0);
     }
 }
