@@ -4,6 +4,9 @@
 //! The server handler lives in [`server`], the SSH transport in [`ssh`], and the
 //! read-only command whitelist in [`whitelist`].
 
+mod audit;
+mod checks;
+mod config;
 mod server;
 mod ssh;
 mod whitelist;

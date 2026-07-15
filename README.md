@@ -126,9 +126,22 @@ cargo build --release
 <details>
 <summary><b>Use with an MCP client</b></summary>
 
-The server speaks MCP over stdio and currently exposes a single `ping` tool
-(returns `"pong"`). Point your client at the binary as a `stdio` server. Claude
-Desktop config:
+The server speaks MCP over stdio. Tools: `ping` (liveness) and `run_audit`,
+which audits a **target alias** defined in an operator-owned config — host, user
+and key never come from the client, so a prompt-injected model cannot pick an
+arbitrary host or key. Define targets first (see
+[`docs/targets.example.toml`](docs/targets.example.toml)):
+
+```toml
+# $MIKROTIK_AUDIT_CONFIG or ~/.config/mikrotik-audit-mcp/targets.toml
+[targets.home-router]
+host = "192.168.88.1"
+user = "auditor"
+identity_file = "~/.ssh/mikrotik_audit"
+```
+
+Then call `run_audit { "target": "home-router" }`. Point your client at the
+binary as a `stdio` server. Claude Desktop config:
 
 ```json
 {

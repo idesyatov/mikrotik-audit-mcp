@@ -1,0 +1,25 @@
+# Example target registry for mikrotik-audit-mcp.
+#
+# Copy to one of:
+#   - the path in $MIKROTIK_AUDIT_CONFIG, or
+#   - ~/.config/mikrotik-audit-mcp/targets.toml
+#
+# The `run_audit` tool takes only a target *alias* (e.g. "home-router"); host,
+# user and key are defined here, by the operator, and never come from the MCP
+# client. Keep this file readable only by you (it points at your private keys).
+
+[targets.home-router]
+host = "192.168.88.1"
+# port = 22                       # default
+# user = "admin"                  # default
+identity_file = "~/.ssh/mikrotik_audit"
+# strict_host_key = "accept-new"  # yes | accept-new | no (default: accept-new)
+# connect_timeout_secs = 10
+# command_timeout_secs = 30
+
+[targets.corp-edge]
+host = "10.0.0.1"
+port = 2222
+user = "auditor"
+identity_file = "~/.ssh/mikrotik_corp"
+strict_host_key = "yes"

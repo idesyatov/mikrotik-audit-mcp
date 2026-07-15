@@ -1,13 +1,19 @@
 //! MCP server handler.
 //!
-//! Stage 1 exposes a single stub `ping` tool. The SSH transport and the
-//! read-only whitelist (see [`crate::ssh`], [`crate::whitelist`]) are wired into
-//! real audit tools starting from Stage 3.
+//! Tools:
+//!   - `ping` — liveness stub.
+//!   - `run_audit` — runs the read-only audit against a target *alias* defined
+//!     in the operator config. Connection details never come from tool
+//!     arguments, so a prompt-injected model cannot choose an arbitrary host or
+//!     key (see [`crate::config`]).
 
 use rmcp::{
-    handler::server::router::tool::ToolRouter, model::*, tool, tool_handler, tool_router,
-    ErrorData as McpError, ServerHandler,
+    handler::server::router::tool::ToolRouter, handler::server::wrapper::Parameters, model::*,
+    schemars, tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler,
 };
+
+use crate::checks::{Finding, Status};
+use crate::{audit, config};
 
 #[derive(Clone)]
 pub(crate) struct AuditServer {
@@ -15,6 +21,12 @@ pub(crate) struct AuditServer {
     // pass doesn't see that macro-generated read, hence the allow.
     #[allow(dead_code)]
     tool_router: ToolRouter<Self>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub(crate) struct RunAuditParams {
+    #[schemars(description = "Alias of a target defined in the operator config")]
+    target: String,
 }
 
 #[tool_router]
@@ -25,11 +37,55 @@ impl AuditServer {
         }
     }
 
-    /// Liveness stub: returns "pong". Real audit tools replace/extend it later.
+    /// Liveness stub: returns "pong".
     #[tool(description = "Health check — returns \"pong\"")]
     async fn ping(&self) -> Result<CallToolResult, McpError> {
         Ok(CallToolResult::success(vec![ContentBlock::text("pong")]))
     }
+
+    #[tool(description = "Run the read-only security audit against a configured target (by alias)")]
+    async fn run_audit(
+        &self,
+        Parameters(params): Parameters<RunAuditParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let cfg = config::load()
+            .map_err(|e| McpError::internal_error(format!("config error: {e}"), None))?;
+        let target = cfg
+            .target(&params.target)
+            .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
+
+        let findings = audit::run_audit(&target.to_ssh_config())
+            .await
+            .map_err(|e| McpError::internal_error(format!("audit failed: {e}"), None))?;
+
+        let summary = summarize(&params.target, &findings);
+        let json = serde_json::to_string_pretty(&findings)
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+
+        Ok(CallToolResult::success(vec![
+            ContentBlock::text(summary),
+            ContentBlock::text(json),
+        ]))
+    }
+}
+
+fn summarize(target: &str, findings: &[Finding]) -> String {
+    let count = |s: Status| findings.iter().filter(|f| f.status == s).count();
+    let mut out = format!(
+        "Audit of {:?}: {} passed, {} failed, {} errored (of {} checks).\n",
+        target,
+        count(Status::Pass),
+        count(Status::Fail),
+        count(Status::Error),
+        findings.len()
+    );
+    for f in findings.iter().filter(|f| f.status == Status::Fail) {
+        out.push_str(&format!(
+            "- [{:?}] {} ({}): {}\n",
+            f.severity, f.title, f.id, f.detail
+        ));
+    }
+    out
 }
 
 #[tool_handler]
@@ -39,8 +95,9 @@ impl ServerHandler for AuditServer {
             .with_server_info(Implementation::from_build_env())
             .with_protocol_version(ProtocolVersion::V_2024_11_05)
             .with_instructions(
-                "Read-only security audit for MikroTik RouterOS. \
-                 Currently a skeleton: the only tool is `ping`."
+                "Read-only security audit for MikroTik RouterOS. Use `run_audit` with a \
+                 target alias (defined in the operator config) to audit a device; `ping` \
+                 is a liveness check."
                     .to_string(),
             )
     }
