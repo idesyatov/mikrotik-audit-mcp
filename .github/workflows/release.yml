@@ -21,12 +21,15 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             name: linux-amd64
             ext: ""
+            archive: tar.gz
           - target: aarch64-unknown-linux-gnu
             name: linux-arm64
             ext: ""
+            archive: tar.gz
           - target: x86_64-pc-windows-gnu
             name: windows-amd64
             ext: ".exe"
+            archive: zip
     steps:
       - uses: actions/checkout@v4
 
@@ -48,12 +51,18 @@ jobs:
           mkdir -p "$DIR"
           cp target/${{ matrix.target }}/release/mikrotik-audit-mcp${{ matrix.ext }} "$DIR"/
           cp LICENSE README.md "$DIR"/
-          tar czf "${DIR}.tar.gz" "$DIR"
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            zip -r "${DIR}.zip" "$DIR"
+            echo "ASSET=${DIR}.zip" >> "$GITHUB_ENV"
+          else
+            tar czf "${DIR}.tar.gz" "$DIR"
+            echo "ASSET=${DIR}.tar.gz" >> "$GITHUB_ENV"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: mikrotik-audit-mcp-*.tar.gz
+          path: ${{ env.ASSET }}
 
   # Cross-building macOS from a Linux image is impractical (needs osxcross+SDK),
   # so we use a native macOS runner.
@@ -103,5 +112,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/*.tar.gz
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.zip
           generate_release_notes: true
