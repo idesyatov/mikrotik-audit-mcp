@@ -23,6 +23,11 @@ anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
+# Client features are used only by the stdio integration test (tests/mcp_stdio.rs),
+# which spawns the built server as a child process and speaks MCP to it.
+[dev-dependencies]
+rmcp = { version = "2", features = ["client", "transport-child-process"] }
+
 [profile.release]
 strip = true
 lto = true
