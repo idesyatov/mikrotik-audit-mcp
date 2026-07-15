@@ -1,0 +1,29 @@
+# Single image for local development AND CI — so behavior stays identical.
+# Developers don't need Rust on the host: everything runs via docker compose.
+FROM rust:latest
+
+# System tools:
+#  - openssh-client — SSH to RouterOS runs via subprocess (system ssh), Stage 2.
+#  - gcc-mingw-w64 / gcc-aarch64 — linkers for cross-compilation (release, Stage 9).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        openssh-client \
+        gcc-mingw-w64-x86-64 \
+        gcc-aarch64-linux-gnu \
+    && rm -rf /var/lib/apt/lists/*
+
+# Components and compile targets. macOS targets are not added here: cross-building
+# for Apple from a Linux image needs osxcross+SDK; in release.yml macOS is built
+# on a native runner (see .github/workflows/release.yml, Stage 9).
+RUN rustup component add rustfmt clippy \
+    && rustup target add \
+        x86_64-unknown-linux-gnu \
+        aarch64-unknown-linux-gnu \
+        x86_64-pc-windows-gnu
+
+# cargo-watch — interactive dev loop (the `dev` service).
+RUN cargo install cargo-watch --locked
+
+# Linker for the aarch64 target (used in release, Stage 9).
+ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+
+WORKDIR /app

@@ -1,0 +1,9 @@
+target/
+dist/
+.git/
+.github/
+.idea/
+.vscode/
+.claude/
+*.md
+.env
