@@ -7,6 +7,7 @@
 mod audit;
 mod checks;
 mod config;
+mod scoring;
 mod server;
 mod ssh;
 mod whitelist;

@@ -13,6 +13,7 @@ use rmcp::{
 };
 
 use crate::checks::{Finding, Status};
+use crate::scoring::{self, Score};
 use crate::{audit, config};
 
 #[derive(Clone)]
@@ -58,22 +59,28 @@ impl AuditServer {
             .await
             .map_err(|e| McpError::internal_error(format!("audit failed: {e}"), None))?;
 
-        let summary = summarize(&params.target, &findings);
-        let json = serde_json::to_string_pretty(&findings)
+        let score = scoring::score(&findings, scoring::DEFAULT_WEIGHTS);
+
+        let summary = summarize(&params.target, &score, &findings);
+        let findings_json = serde_json::to_string_pretty(&findings)
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+        let score_json = serde_json::to_string_pretty(&score)
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
         Ok(CallToolResult::success(vec![
             ContentBlock::text(summary),
-            ContentBlock::text(json),
+            ContentBlock::text(score_json),
+            ContentBlock::text(findings_json),
         ]))
     }
 }
 
-fn summarize(target: &str, findings: &[Finding]) -> String {
+fn summarize(target: &str, score: &Score, findings: &[Finding]) -> String {
     let count = |s: Status| findings.iter().filter(|f| f.status == s).count();
     let mut out = format!(
-        "Audit of {:?}: {} passed, {} failed, {} errored (of {} checks).\n",
+        "Audit of {:?}: score {}/100 — {} passed, {} failed, {} errored (of {} checks).\n",
         target,
+        score.total,
         count(Status::Pass),
         count(Status::Fail),
         count(Status::Error),
