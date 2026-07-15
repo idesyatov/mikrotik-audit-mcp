@@ -1,49 +1,16 @@
 //! mikrotik-audit-mcp — read-only security audit of MikroTik RouterOS over MCP.
 //!
-//! Stage 1: a minimal MCP server over stdio exposing a single stub `ping` tool.
-//! SSH access, the command whitelist and real audit checks arrive in later stages.
+//! `main` only wires things together: it starts the MCP server on stdio.
+//! The server handler lives in [`server`], the SSH transport in [`ssh`], and the
+//! read-only command whitelist in [`whitelist`].
 
-use rmcp::{
-    handler::server::router::tool::ToolRouter, model::*, tool, tool_handler, tool_router,
-    transport::stdio, ErrorData as McpError, ServerHandler, ServiceExt,
-};
+mod server;
+mod ssh;
+mod whitelist;
 
-#[derive(Clone)]
-struct AuditServer {
-    // Read by the `#[tool_handler]`-generated dispatch; the binary's dead-code
-    // pass doesn't see that macro-generated read, hence the allow.
-    #[allow(dead_code)]
-    tool_router: ToolRouter<Self>,
-}
+use rmcp::{transport::stdio, ServiceExt};
 
-#[tool_router]
-impl AuditServer {
-    fn new() -> Self {
-        Self {
-            tool_router: Self::tool_router(),
-        }
-    }
-
-    /// Liveness stub: returns "pong". Real audit tools replace/extend it later.
-    #[tool(description = "Health check — returns \"pong\"")]
-    async fn ping(&self) -> Result<CallToolResult, McpError> {
-        Ok(CallToolResult::success(vec![ContentBlock::text("pong")]))
-    }
-}
-
-#[tool_handler]
-impl ServerHandler for AuditServer {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::from_build_env())
-            .with_protocol_version(ProtocolVersion::V_2024_11_05)
-            .with_instructions(
-                "Read-only security audit for MikroTik RouterOS. \
-                 Currently a skeleton: the only tool is `ping`."
-                    .to_string(),
-            )
-    }
-}
+use crate::server::AuditServer;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
