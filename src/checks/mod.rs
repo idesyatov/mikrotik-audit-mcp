@@ -12,7 +12,8 @@ pub mod updates;
 
 use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+// Ordering follows declaration order: Info < Low < Medium < High < Critical.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
 // The full scale is defined up front; not every level is used yet.
 #[allow(dead_code)]

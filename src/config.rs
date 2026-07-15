@@ -100,11 +100,15 @@ impl Config {
     }
 }
 
-/// Resolve the config path and load it.
+/// Load the config from the default/env path.
 pub fn load() -> Result<Config, ConfigError> {
-    let path = config_path();
-    let text = std::fs::read_to_string(&path).map_err(|source| ConfigError::Read {
-        path: path.clone(),
+    load_from(&config_path())
+}
+
+/// Load the config from an explicit path.
+pub fn load_from(path: &Path) -> Result<Config, ConfigError> {
+    let text = std::fs::read_to_string(path).map_err(|source| ConfigError::Read {
+        path: path.to_path_buf(),
         source,
     })?;
     toml::from_str(&text).map_err(ConfigError::Parse)

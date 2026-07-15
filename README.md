@@ -168,6 +168,28 @@ the `mikrotik-audit` server appears and its `ping` tool can be called.
 </details>
 
 <details>
+<summary><b>CLI mode (cron / CI)</b></summary>
+
+Besides the MCP server, the binary runs a one-shot audit (same target registry):
+
+```bash
+mikrotik-audit-mcp audit --target home-router
+mikrotik-audit-mcp audit --target corp-edge --profile corporate --format json
+```
+
+Exit codes (for CI gates): `0` clean · `1` error (config/target/connection) ·
+`2` a gate tripped. Both gates are configurable:
+
+- `--fail-on <off|low|medium|high|critical>` — default `high`: fail if any
+  failed check is at least this severity (`off` disables).
+- `--fail-under <N>` — fail if the total score is below `N`.
+
+`--config <path>` overrides the config location (else `$MIKROTIK_AUDIT_CONFIG`
+or the standard path).
+
+</details>
+
+<details>
 <summary><b>Development</b></summary>
 
 Requires only `docker` and `docker compose` (plus `make` for the shortcuts).

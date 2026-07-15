@@ -1,4 +1,4 @@
-//! MCP server handler.
+//! MCP server handler and the stdio serve loop.
 //!
 //! Tools:
 //!   - `ping` — liveness stub.
@@ -9,12 +9,11 @@
 
 use rmcp::{
     handler::server::router::tool::ToolRouter, handler::server::wrapper::Parameters, model::*,
-    schemars, tool, tool_handler, tool_router, ErrorData as McpError, ServerHandler,
+    schemars, tool, tool_handler, tool_router, transport::stdio, ErrorData as McpError,
+    ServerHandler, ServiceExt,
 };
 
-use crate::checks::{Finding, Status};
-use crate::scoring::{self, Score};
-use crate::{audit, config};
+use crate::{audit, config, report, scoring};
 
 #[derive(Clone)]
 pub(crate) struct AuditServer {
@@ -72,40 +71,15 @@ impl AuditServer {
             .map_err(|e| McpError::internal_error(format!("audit failed: {e}"), None))?;
 
         let score = scoring::score(&findings, profile);
-
-        let summary = summarize(&params.target, &score, &findings);
-        let findings_json = serde_json::to_string_pretty(&findings)
-            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        let score_json = serde_json::to_string_pretty(&score)
+        let text = report::text(&params.target, &score, &findings);
+        let json = report::json(&params.target, &score, &findings)
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
         Ok(CallToolResult::success(vec![
-            ContentBlock::text(summary),
-            ContentBlock::text(score_json),
-            ContentBlock::text(findings_json),
+            ContentBlock::text(text),
+            ContentBlock::text(json),
         ]))
     }
-}
-
-fn summarize(target: &str, score: &Score, findings: &[Finding]) -> String {
-    let count = |s: Status| findings.iter().filter(|f| f.status == s).count();
-    let mut out = format!(
-        "Audit of {:?} [{:?} profile]: score {}/100 — {} passed, {} failed, {} errored (of {} checks).\n",
-        target,
-        score.profile,
-        score.total,
-        count(Status::Pass),
-        count(Status::Fail),
-        count(Status::Error),
-        findings.len()
-    );
-    for f in findings.iter().filter(|f| f.status == Status::Fail) {
-        out.push_str(&format!(
-            "- [{:?}] {} ({}): {}\n",
-            f.severity, f.title, f.id, f.detail
-        ));
-    }
-    out
 }
 
 #[tool_handler]
@@ -121,4 +95,17 @@ impl ServerHandler for AuditServer {
                     .to_string(),
             )
     }
+}
+
+/// Start the MCP server over stdio and run until the client disconnects.
+pub(crate) async fn serve() -> anyhow::Result<()> {
+    tracing::info!("starting mikrotik-audit-mcp MCP server (stdio)");
+
+    let service = AuditServer::new().serve(stdio()).await.map_err(|e| {
+        tracing::error!("failed to start MCP server: {e:?}");
+        e
+    })?;
+
+    service.waiting().await?;
+    Ok(())
 }
