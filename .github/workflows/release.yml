@@ -33,9 +33,12 @@ jobs:
       - name: Build dev image
         run: docker compose build build-release
 
+      # Run the same image as dev/CI, but without the target-cache volume, so
+      # the binary is written to the host workspace where Package can find it.
       - name: Cross-compile ${{ matrix.target }}
         run: |
-          docker compose run --rm build-release \
+          docker run --rm -v "$PWD":/app -w /app \
+            mikrotik-audit-mcp:dev \
             cargo build --release --locked --target ${{ matrix.target }}
 
       - name: Package
