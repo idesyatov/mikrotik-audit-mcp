@@ -1,6 +1,6 @@
 //! Services-domain checks (`/ip service`).
 
-use super::parse::parse_services;
+use super::parse::{parse_services, parse_settings};
 use super::{Check, Domain, Outcome, Severity};
 
 const SERVICE_CMD: &str = "/ip service print detail";
@@ -120,6 +120,39 @@ impl Check for SshOnDefaultPort {
     }
 }
 
+/// SSH `strong-crypto` is disabled (weak ciphers/MACs allowed).
+pub struct SshStrongCrypto;
+
+impl Check for SshStrongCrypto {
+    fn id(&self) -> &'static str {
+        "services-ssh-strong-crypto"
+    }
+    fn domain(&self) -> Domain {
+        Domain::Services
+    }
+    fn title(&self) -> &'static str {
+        "SSH strong-crypto disabled"
+    }
+    fn severity(&self) -> Severity {
+        Severity::Medium
+    }
+    fn recommendation(&self) -> &'static str {
+        "Enable it: /ip ssh set strong-crypto=yes (drops weak ciphers, MACs and short keys)."
+    }
+    fn command(&self) -> &'static str {
+        "/ip ssh print"
+    }
+    fn evaluate(&self, output: &str) -> Outcome {
+        match parse_settings(output)
+            .get("strong-crypto")
+            .map(String::as_str)
+        {
+            Some("yes") => Outcome::pass("SSH strong-crypto is enabled."),
+            _ => Outcome::fail("SSH strong-crypto is disabled."),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::Status;
@@ -169,5 +202,17 @@ mod tests {
     fn ssh_default_port_flagged() {
         assert_eq!(SshOnDefaultPort.evaluate(VULNERABLE).status, Status::Fail);
         assert_eq!(SshOnDefaultPort.evaluate(HARDENED).status, Status::Pass);
+    }
+
+    #[test]
+    fn ssh_strong_crypto() {
+        assert_eq!(
+            SshStrongCrypto.evaluate("strong-crypto: yes\n").status,
+            Status::Pass
+        );
+        assert_eq!(
+            SshStrongCrypto.evaluate("strong-crypto: no\n").status,
+            Status::Fail
+        );
     }
 }

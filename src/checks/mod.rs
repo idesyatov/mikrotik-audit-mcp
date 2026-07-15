@@ -3,8 +3,12 @@
 //! unit-testable against fixtures without a device (see also Stage 8 evals).
 
 pub mod auth;
+pub mod firewall;
+pub mod hygiene;
+pub mod logging;
 mod parse;
 pub mod services;
+pub mod updates;
 
 use serde::Serialize;
 
@@ -21,10 +25,14 @@ pub enum Severity {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum Domain {
     Auth,
     Services,
+    Firewall,
+    Updates,
+    Logging,
+    NetworkHygiene,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -85,10 +93,61 @@ pub trait Check: Send + Sync {
 /// Every check the auditor runs.
 pub fn all_checks() -> Vec<Box<dyn Check>> {
     vec![
+        // auth
         Box::new(auth::DefaultAdminUser),
         Box::new(auth::UsersWithoutAddressRestriction),
+        // services
         Box::new(services::InsecureServiceEnabled),
         Box::new(services::ServicesWithoutAddressRestriction),
         Box::new(services::SshOnDefaultPort),
+        Box::new(services::SshStrongCrypto),
+        // firewall
+        Box::new(firewall::InputChainHasRules),
+        Box::new(firewall::InputDefaultDrop),
+        Box::new(firewall::InputDropsInvalid),
+        // updates
+        Box::new(updates::StableReleaseChannel),
+        Box::new(updates::RouterboardFirmwareCurrent),
+        // logging
+        Box::new(logging::RemoteLoggingConfigured),
+        Box::new(logging::CriticalTopicsLogged),
+        // network hygiene
+        Box::new(hygiene::NeighborDiscoveryRestricted),
+        Box::new(hygiene::BandwidthServerDisabled),
+        Box::new(hygiene::MacServerRestricted),
+        Box::new(hygiene::MacWinboxRestricted),
+        Box::new(hygiene::DnsNotOpenResolver),
+        Box::new(hygiene::UpnpDisabled),
+        Box::new(hygiene::RomonDisabled),
     ]
+}
+
+#[cfg(test)]
+mod registry_tests {
+    use super::all_checks;
+    use crate::whitelist;
+
+    /// Every command a check issues must pass the read-only whitelist, so a
+    /// future whitelist change can never silently break the audit.
+    #[test]
+    fn all_check_commands_are_whitelisted() {
+        for check in all_checks() {
+            assert!(
+                whitelist::validate(check.command()).is_ok(),
+                "check {} uses a non-whitelisted command: {:?}",
+                check.id(),
+                check.command()
+            );
+        }
+    }
+
+    #[test]
+    fn check_ids_are_unique() {
+        let checks = all_checks();
+        let total = checks.len();
+        let mut ids: Vec<&str> = checks.iter().map(|c| c.id()).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), total, "duplicate check ids");
+    }
 }
