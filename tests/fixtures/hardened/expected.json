@@ -1,0 +1,29 @@
+{
+  "description": "Fully hardened router: admin disabled, only ssh/winbox on non-default ports and address-restricted, strong-crypto, deny-by-default firewall, stable channel, current firmware, remote logging, discovery and mac-access locked down. Every check passes.",
+  "findings": {
+    "auth-default-admin": "pass",
+    "auth-user-no-address": "pass",
+    "services-insecure-enabled": "pass",
+    "services-no-address": "pass",
+    "services-ssh-default-port": "pass",
+    "services-ssh-strong-crypto": "pass",
+    "firewall-input-has-rules": "pass",
+    "firewall-input-default-drop": "pass",
+    "firewall-input-drop-invalid": "pass",
+    "updates-stable-channel": "pass",
+    "updates-routerboard-firmware": "pass",
+    "logging-remote-configured": "pass",
+    "logging-critical-topics": "pass",
+    "hygiene-neighbor-discovery": "pass",
+    "hygiene-bandwidth-server": "pass",
+    "hygiene-mac-server": "pass",
+    "hygiene-mac-winbox": "pass",
+    "hygiene-dns-open-resolver": "pass",
+    "hygiene-upnp": "pass",
+    "hygiene-romon": "pass"
+  },
+  "scores": {
+    "home": 100,
+    "corporate": 100
+  }
+}

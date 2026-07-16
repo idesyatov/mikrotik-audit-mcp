@@ -1,0 +1,5 @@
+ 0 chain=input action=accept connection-state=established,related
+ 1 chain=input action=drop connection-state=invalid
+ 2 chain=input action=accept protocol=icmp
+ 3 chain=input action=accept in-interface-list=LAN
+ 4 chain=input action=drop

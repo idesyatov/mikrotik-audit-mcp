@@ -1,0 +1,2 @@
+Flags: X - disabled
+ 0   name="admin" group=full address=""

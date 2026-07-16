@@ -1,0 +1,4 @@
+       routerboard: yes
+             model: RB5009UG+S+
+   current-firmware: 7.15.3
+   upgrade-firmware: 7.15.3

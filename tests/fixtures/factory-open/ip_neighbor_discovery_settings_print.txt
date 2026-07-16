@@ -1,0 +1,2 @@
+   discover-interface-list: all
+     lldp-med-net-policy-vlan: disabled

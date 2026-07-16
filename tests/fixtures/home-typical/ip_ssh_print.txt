@@ -1,0 +1,3 @@
+      forwarding-enabled: no
+            strong-crypto: yes
+            host-key-size: 2048

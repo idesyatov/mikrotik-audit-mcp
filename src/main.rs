@@ -15,6 +15,10 @@ mod server;
 mod ssh;
 mod whitelist;
 
+// Stage 8 evals: regression tests over captured RouterOS output (tests/fixtures).
+#[cfg(test)]
+mod evals;
+
 use clap::Parser;
 
 #[tokio::main]

@@ -1,0 +1,29 @@
+{
+  "description": "Factory-fresh router, nothing hardened: default admin, cleartext services, no firewall, everything open. Every check fails.",
+  "findings": {
+    "auth-default-admin": "fail",
+    "auth-user-no-address": "fail",
+    "services-insecure-enabled": "fail",
+    "services-no-address": "fail",
+    "services-ssh-default-port": "fail",
+    "services-ssh-strong-crypto": "fail",
+    "firewall-input-has-rules": "fail",
+    "firewall-input-default-drop": "fail",
+    "firewall-input-drop-invalid": "fail",
+    "updates-stable-channel": "fail",
+    "updates-routerboard-firmware": "fail",
+    "logging-remote-configured": "fail",
+    "logging-critical-topics": "fail",
+    "hygiene-neighbor-discovery": "fail",
+    "hygiene-bandwidth-server": "fail",
+    "hygiene-mac-server": "fail",
+    "hygiene-mac-winbox": "fail",
+    "hygiene-dns-open-resolver": "fail",
+    "hygiene-upnp": "fail",
+    "hygiene-romon": "fail"
+  },
+  "scores": {
+    "home": 12,
+    "corporate": 19
+  }
+}

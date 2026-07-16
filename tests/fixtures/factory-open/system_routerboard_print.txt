@@ -1,0 +1,4 @@
+       routerboard: yes
+             model: RB750Gr3
+   current-firmware: 6.44.6
+   upgrade-firmware: 7.15.3

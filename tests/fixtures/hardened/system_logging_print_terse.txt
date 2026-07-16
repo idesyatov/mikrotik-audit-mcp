@@ -1,0 +1,2 @@
+ 0 topics=info action=memory
+ 1 topics=error,critical,warning action=remote

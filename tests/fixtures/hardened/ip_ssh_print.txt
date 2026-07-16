@@ -1,0 +1,4 @@
+      forwarding-enabled: no
+            strong-crypto: yes
+            host-key-size: 4096
+    always-allow-password-login: no

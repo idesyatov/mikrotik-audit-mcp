@@ -1,0 +1,29 @@
+{
+  "description": "Realistic home router: admin disabled, cleartext off, ssh/winbox address-restricted, deny-by-default firewall. Still on ssh port 22, RouterBOARD firmware behind, no remote syslog, neighbor discovery on all interfaces.",
+  "findings": {
+    "auth-default-admin": "pass",
+    "auth-user-no-address": "pass",
+    "services-insecure-enabled": "pass",
+    "services-no-address": "pass",
+    "services-ssh-default-port": "fail",
+    "services-ssh-strong-crypto": "pass",
+    "firewall-input-has-rules": "pass",
+    "firewall-input-default-drop": "pass",
+    "firewall-input-drop-invalid": "pass",
+    "updates-stable-channel": "pass",
+    "updates-routerboard-firmware": "fail",
+    "logging-remote-configured": "fail",
+    "logging-critical-topics": "pass",
+    "hygiene-neighbor-discovery": "fail",
+    "hygiene-bandwidth-server": "pass",
+    "hygiene-mac-server": "pass",
+    "hygiene-mac-winbox": "pass",
+    "hygiene-dns-open-resolver": "pass",
+    "hygiene-upnp": "pass",
+    "hygiene-romon": "pass"
+  },
+  "scores": {
+    "home": 95,
+    "corporate": 96
+  }
+}
